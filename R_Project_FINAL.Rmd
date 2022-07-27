@@ -1,0 +1,397 @@
+---
+title: "Final Project R" 
+output: html_document 
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# [Income of Adults]{style="color:DarkSeaGreen"} {.tabset}
+
+## <font size="4">Intro
+
+![](https://www.qs.com/wp-content/uploads/2015/09/SALARY_SURVEY_SPLASH_3.jpg){width=50%}
+
+### <font size="4">[***Background***]{style="color: MidnightBlue  ;font-family: 'Georgia';"}
+
+-   In this markdown we analyze the data set income of adults that was taken from Kaggle [Income of adults](https://www.kaggle.com/ddmasterdon/income-adult?select=adult_data.csv)
+-   The data provide information about salaries throughout the US with many cross-sections of the popultaion such as age, race, sex, education etcetera.
+
+### <font size="4">[***Goals***]{style="color: MidnightBlue  ;font-family: 'Georgia';"}
+
+We don't have one specific question which is our main goal to provide answer for, but rather few subject we want to investigate through this analysis.
+
+-   Find out whether there are distinctively differences of salary rate between female parents and childless females.
+-   Check if there is still discrimination issue that reflected in salaries.
+-   Find out what group invest more time working, the young population or the older one.
+-   Discover what are the major parameters that will determine the working time of an individual.
+
+## <font size="4">Data Import and Tidying
+-   Initially we used read.csv function to read the data.
+Afterwards, we had some tidying work to do.
+-   First we had to remove missing values (such as "?") from our target's categories (work class, education, occupation). 
+-   Second, after deciding to ask questions about females salary, how children affect salary, does race can be an indicator for how much you'll earn and to find out what parameters involved in the question how many hours an individual will spend working, we had to make some changes to make our data more accessible and comfortable to work with. 
+-   We arranged our data to a single table for every test with the specific information and changes needed.
+
+
+```{r Data import, warning=FALSE}
+suppressWarnings(suppressMessages(library(tidyverse)))
+suppressWarnings(suppressMessages(library(janitor)))
+suppressWarnings(suppressMessages(library(DT)))
+suppressWarnings(suppressMessages(full_data <- read_csv("adult_data.csv"))) 
+income <- full_data %>% 
+    janitor::clean_names() %>%
+    filter(workclass != "?", occupation != "?", native_country != "?") %>%
+    mutate(salary_plus50 = salary == ">50K") %>%
+    mutate(parent = relationship == "Own-child") %>%
+    view()
+
+datatable(full_data, options = list(searching = FALSE, pageLength = 5, lengthMenu = c(5, 10, 15, 20), scrollX = T))
+
+
+```
+
+There is the initial table that we worked with.
+
+[Back To Top](#)
+
+## <font size="4">Data Visualization
+
+First of all we compared between males and females who's earn more than 50K.
+
+```{r visu1, echo =TRUE}
+
+visu1 <- income %>%
+  select(c("parent", "salary_plus50", "sex"))
+
+ggplot(visu1, aes(x = sex, fill = salary_plus50)) + geom_bar(position = "fill", colour = "black") +
+  labs(title = "Females Vs. Males salary", y = "Proportion")
+
+```
+
+According to this result we wanted to check why females getting paid much less than males. We will focus on a specific parameter that might serve an affect.
+
+Lets check if parenthood among females contribute to the differences.
+
+```{r visu3 , echo=TRUE}
+
+visu3 <- income %>%
+  mutate(parent = relationship == "Own-child") %>%
+  mutate(salary_plus50 = salary == ">50K") %>%
+  filter(sex == "Female", education == "Bachelors" | education == "Masters" | education == "Doctorate") %>%
+  select(c("age","sex","education", "parent", "salary", "salary_plus50"))
+
+ggplot(visu3, aes(x = parent, fill = salary_plus50, color = salary_plus50, xlab = "P")) + geom_bar(position = "fill", colour = "black") +
+  labs(title = "Females with child salary",  y = "Proportion") +
+  scale_fill_manual("earn more than 50K", values = c("FALSE" = "LightSkyBlue  ", "TRUE" = "LightGreen "))
+
+```
+
+It is clearly that there is a drastic decrease after females having a birth.
+
+We want to check as well how education status affect income 
+
+```{r visu4 , echo=TRUE}
+
+unique(income$education)
+
+edu_filtered <- income %>%
+  filter(education != "1st-4th" & education != "5th-6th" & education != "7th-8th" & education !=  "9th" & education != "10th" & education != "11th" & education != "12th" & education != "Assoc-acdm" & education != "Assoc-voc")
+
+unique(edu_filtered$education)
+
+ggplot(edu_filtered, aes(x = education , fill = salary_plus50)) + 
+  geom_bar(width = 0.6,position = "fill") + 
+   scale_fill_manual("Salary above 50K", values = c("FALSE" = "DarkSlateGrey  ", "TRUE" = "DarkGoldenRod")) +
+  labs(title = "Salaries by education status", x = "Education status", y = "Proportion")
+
+
+```
+
+We see the higher education level the probability of getting nice salary is bigger.
+
+[Back To Top](#)
+
+## <font size="4">Mothers Salary Test
+
+### [Does the proportion of females which earn more than 50K with children equals to the ones without children?]{style="color: MidnightBlue   ;font-family: 'Georgia';"}
+
+The test suppose to indicate whether a child birth affect the income of women in the US.
+
+**Proportion Test:**
+
+-   Null Hypothesis: There is no difference between the proportion of females salary with children and the ones without.
+-   Alternative Hypothesis: The proportion of females salary with children is lesser than females without children.
+-   We will test our assumption with 0.99 confidence interval.
+
+**Taking under consideration:**
+
+-   To avoid biased results causing by different level of education which known that affect salary, we compared only between women with college education.
+-   $$ \bullet \hat{p_1}\times n_1 \ge 10  $$ $$ \bullet \hat{q_1}\times n_1 \ge 10 $$ $$  \bullet \hat{p_2}\times n_2 \ge 10 $$ $$ \bullet \hat{q_2}\times n_2 \ge 10$$
+
+-   In order to create the test, we filtered the data into two groups of women which distinct by their salary (above and less than 50K), and children and non children. In addition, we filtered the women into a homogeneous group of education degree.
+
+```{r Proportion Female Test, echo=TRUE}
+
+test1 <- income %>%
+  mutate(parent = relationship == "Own-child") %>%
+  mutate(salary_plus50 = salary == ">50K") %>%
+  filter(sex == "Female", education == "Bachelors" | education == "Masters" | education == "Doctorate") %>%
+  select(c("age","sex","education", "parent", "salary", "salary_plus50"))
+
+
+wealthy_parent <- test1 %>%
+  filter(parent == "TRUE", salary_plus50 == "TRUE") %>%
+  count()
+
+
+wealthy_free <- test1 %>%
+  filter(parent == "FALSE") %>%
+  filter(salary_plus50 == "TRUE") %>%
+  count()
+
+parents <- test1 %>% 
+  filter(parent == "TRUE") %>%
+  count()
+
+freedom <- test1 %>% 
+  filter(parent == "FALSE") %>%
+  count() 
+
+
+prop.test(x = c(wealthy_parent$n, wealthy_free$n), n = c(parents$n, freedom$n), conf.level = 0.99)
+
+
+```
+
+### [Results]{style="color: MidnightBlue  ;font-family: 'Georgia';"}
+
+-   We reject null hypothesis based on our test values(chi-square, p-value).
+-   According to the test we can tell that women with child are earning distinctively lower salaries compare to non-child women at 0.01 level of significance.
+
+[Back To Top](#)
+
+## <font size="4">Race Salary Test
+
+### [Does white people earn overwhelmingly more money than the black population?]{style="color: MidnightBlue  ;font-family: 'Georgia';"}
+
+We would like to see if the knowing fact that there are still distinctively biased differences in salaries which favors the white's between those two population according to our data.
+
+**Proportion Test:**
+
+-   Null Hypothesis: White people earn more money than black people.
+-   Alternative Hypothesis: The proportion of white people salary is equals or lesser than black people salaries.
+-   We will test our assumption with 0.99 confidence interval.
+
+**Taking under consideration:**
+
+-   There are other groups such as American Indians and Asians that we ignored due to the main goal which is to test the difference between blacks and whites only.
+-   $$ \bullet \hat{p_1}\times n_1 \ge 10  $$ $$ \bullet \hat{q_1}\times n_1 \ge 10 $$ $$  \bullet \hat{p_2}\times n_2 \ge 10 $$ $$ \bullet \hat{q_2}\times n_2 \ge 10$$
+
+```{r Proportion Race Test, echo=TRUE}
+
+test2 <- income %>%
+  mutate(salary_plus50 = salary == ">50K") %>%
+  filter(race %in% c("Black", "White")) %>%
+  select(c("race","salary_plus50")) 
+
+
+wealthy_whites <- test2 %>%
+  filter(race == "White", salary_plus50 == "TRUE") %>%
+  count() 
+
+wealthy_blacks <- test2 %>%
+  filter(race == "Black" , salary_plus50 == "TRUE") %>%
+  count()
+
+
+whites <- test2 %>% 
+  filter(race == "White") %>%
+  count() 
+
+blacks <- test2 %>% 
+  filter(race == "Black") %>%
+  count() 
+
+
+prop.test(x = c(wealthy_whites$n, wealthy_blacks$n), n = c(whites$n, blacks$n), alternative = "greater" ,conf.level = 0.99)
+
+
+```
+
+### [Results]{style="color: MidnightBlue   ;font-family: 'Georgia';"}
+
+-   We accept the null hypothesis due to our test values(zero not include in our confidence interval, low p-value).
+-   According to the test it is understood significantly that white people earn much more than black ones, as we predicted.
+
+Lets visualize the differences among them.
+
+```{r visu4 Race , echo=TRUE}
+
+visu4 <- test2 %>%
+  select(c("race", "salary_plus50"))
+
+ggplot(visu4, aes(x = race, fill = salary_plus50)) + geom_bar(position = "fill", colour = "black") +
+  labs(title = "Salaries differences by race ", y = "Proportion") +
+  scale_fill_manual("earn more than 50K", values = c("FALSE" = "LightBlue", "TRUE" = "SandyBrown   "))
+
+
+```
+
+-  We saw with both tools that white people earn more money than black ones.
+
+[Back To Top](#)
+
+## <font size="4">T.Test
+
+### [Whos working more? Young people or older ones?]{style="color: MidnightBlue  ;font-family: 'Georgia';"}
+
+-   In this test we have tried to check the connection between the excepted value of working hours per week and different age's groups. 
+-   In general, the mean of the working hours per week in our database (38.4379) is a bit higher than the known mean how measured according to data released by the US Bureau of Labor Statistics (34.6). This distinction has no effect on the test.
+-   In this test, we have decided to separate to two groups distinct by the age of above 45 and below.
+-   We estimate that the groups are normally distributed. 
+-   Null Hypothesis: There is no different between the excepted value of working hours per week between people above age of 45 and below 45.
+-   Alternative Hypothesis: The excepted value of working hours per week of workers above the age of 45 is greater than age of below 45.
+-   We will test our assumption with default 0.95 confidence interval.
+
+-   $$ \ H_0 = \mu_1 - \mu_2  = 0\\$$ $$ \ H_1 = \mu_1 - \mu_2 \neq 0 $$
+-   In addition, let's check with variances test, if there is a difference between the variances of the two groups. 
+```{r F.test age, echo =TRUE}
+mean(income$age)
+above_45 <- income %>% select(c("age", "hours_per_week")) %>% filter(age >= 45)
+under_45 <- income %>% select(c("age", "hours_per_week")) %>% filter(age < 45)
+var.test(x = above_45$hours_per_week, y = under_45$hours_per_week, ratio = 1, alternative = "two.sided")
+```
+
+-   According to the results(we saw the confidence interval doesn't include 1) the variances of the groups are not equal, therefor we will use the model of unknown variance and mean test.
+
+```{r T.test age, echo =TRUE}
+t.test(x = above_45$hours_per_week, y = under_45$hours_per_week, alternative = "two.sided")
+
+ggplot(income, aes(age, hours_per_week)) + geom_smooth(color = "Chartreuse") +
+  labs(title = "Time working per age ", x = "Age",  y = "Hours")
+
+  
+```
+
+### [Results]{style="color: MidnightBlue  ;font-family: 'Georgia';"}
+
+-   We reject the null hypothesis due to our test values. (T statistic, p-value)
+-   As we can see, the mean of the "above 45" group is greater than the mean of "below 45" group. We estimate that the difference might come from the fact that people around the age of 18-25 still acquire their education degree, and among the younger group there are many more new parents so on account of this, they invest more time raising their children and  less working. 
+
+
+[Back To Top](#)
+
+## <font size="4">Multiple Linear Regression
+
+### [Inroduction to the model:]{style="color: MidnightBlue  ;font-family: 'Georgia';"}
+  By this model, we are interested in exploring whether there is a multiple linear relationship between degrees of education, occupation, relationship, race, sex, native country, capital gain and loss on the working hours per week.
+  
+$$
+H_0: \beta_1 = \beta_2 =  \ ...\ = \beta_k = 0\\
+H_1: ∃i\:such\:that\:\beta_i \neq 0
+$$
+
+### [To perform the multiple regression model we need to check two assumptions first:]{style="color: MidnightBlue  ;font-family: 'Georgia';"}
+
+  1. residuals are homoscedastic.
+  2. residuals distributed normally.
+  
+```{r residual test, echo=FALSE, message=FALSE, warning=FALSE}
+
+
+reg <- income %>%
+  janitor::clean_names() %>%
+  mutate(college_degree = education %in% c("Bachelors" , "Masters" , "Doctorate", "Prof-school")) %>% 
+  mutate(parent = relationship == "Own-child") %>%
+  filter(!(workclass %in% c("?", "Without-pay", ""))) %>%
+  mutate(self_emp = workclass %in% c("Self-emp-not-inc", "Self-emp-inc")) %>%
+  filter(race != "Other") %>%
+  select(c("hours_per_week","age", "race", "sex", "salary", "college_degree", "parent", "self_emp")) %>%
+  view() 
+
+reg_model <- lm(formula = hours_per_week ~ . , data = reg) 
+
+
+reg_model %>% ggplot(aes(x=.fitted,y=.resid)) +
+  geom_point(alpha=0.5) + geom_hline(yintercept=0) +
+  labs(title="Residual Plot")
+
+reg_model %>% ggplot(aes(sample=.resid)) +
+  geom_qq() + geom_qq_line(col="blue") +
+  labs(title="QQ Plot")
+
+```
+
+-   In regard to the homoscedastic assumption it doesn't fit perfectly though at most parts it looks pretty fine so it will satisfy us.
+
+-   As far as the normally distributed assumption, besides the mid-range which behave that way, we can't follow this assumption. 
+
+-   In conclusion, the model assumptions does not hold, but we will still examine it nonetheless knowing that it is uncertain that it is worth relying on because it is not necessarily accurate.
+
+```{r Regression, echo=FALSE, message=FALSE, warning=FALSE}
+
+summary(reg_model)
+
+step(reg_model, direction = "both")
+
+
+```
+
+
+-   Based on the regression model results, we can notice that there are some significant variables that indicate about the amount of hours that a person will invest working. Such as if he is a male or if he holds a college degree he'll probably work more. On the other hand if the adult have a child he will work much less.
+-   Although we can see a strong connections between some of the parameters separately and the hours per week a person spend working, Taking under account the R-squared value, we couldn't point out sufficient forecasts about hours per week working, as the value stands for 0.1456.
+-   In order to improve our model we made AIC test on our model, but according to the results no changes needed by that system.
+
+
+Lets demonstrate a link between hours per week at work and age, which seems to have influence according to the P-value of this variable.
+
+```{r visu1 Regression, echo=FALSE}
+ggplot(reg,aes(x=age ,y = hours_per_week))+
+  geom_point()+geom_smooth(method = "lm")+
+  labs(title="Hours per week based on age", x ="Age", y = "Hours")
+
+
+```
+
+We observe that the older a worker is the greater hours he spends working during a week.
+Visualize the strong connection we observed between parenthood and working time.
+
+```{r visu2 Regression, echo=TRUE}
+mean_hours <- mean(reg$hours_per_week)
+
+ggplot(reg, aes(x= parent, y = hours_per_week,col = parent)) +
+  geom_boxplot() + labs(title = "Parenthood status influence on working time", x = "Parent", y = "Hours")
+
+```
+
+As we can study from the box plot, parenthood indeed is a good indicator for the sum of hours an individual will spend working during a single week.
+
+### [Conclusions:]{style="color: MidnightBlue  ;font-family: 'Georgia';"}
+-    ***To sum up***, according to our model results as the R-square adjusted stands for 0.1454 and the lack of normally distributed residuals assumption, it seems that our multiple regression model is not suitable for predicting solid results, though we could see some strong individually indicators such as age, parenthood, sex, college degree etc.
+
+[Back To Top](#)
+
+## <font size="4">About
+
+This study was made as a final project in the course "Introduction to statistic and data analysis in R" in Tel-Aviv University.
+
+### [Authors]{style="color: MidnightBlue  ;font-family: 'Georgia';"}
+
+-   Yuval Berland
+-   Sahar Machavy
+
+### [Technical details]{style="color: MidnightBlue  ;font-family: 'Georgia';"}
+
+The data analysis and this markdown page were made with R version 4.0.2 in RStudio.
+
+**Libraries:**
+
+-   Tidyverse
+-   Janitor
+-   DT
+
+<p>&nbsp;</p>
+![](https://english.tau.ac.il/sites/default/files/TAU_Logo_HomePage_Eng.png)
+
